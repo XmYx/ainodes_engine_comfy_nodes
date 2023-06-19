@@ -1,0 +1,3 @@
+[submodule "src/was_nodes"]
+	path = src/was_nodes
+	url = https://github.com/WASasquatch/was-node-suite-comfyui
