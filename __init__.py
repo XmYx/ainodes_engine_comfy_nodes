@@ -78,7 +78,7 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
     output_names = ordered_outputs.pop(len(ordered_outputs) - 1)
 
 
-    print("INPUT NAMES BECAME", input_names)
+    #print("INPUT NAMES BECAME", input_names)
 
     class_name = node_name.replace(" ", "")
     #class_code = "OP_NODE_" + class_name.upper()
@@ -156,10 +156,10 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
                     self.input_adapted.append({"type":"COMBOBOX",
                                                "name":input_item[0]})
                     height += 50
-
+            print("ADAPTED INPUT LIST", self.input_adapted)
             self.create_main_layout(grid=1)
-            self.setMinimumHeight(height)
-            self.setMaximumHeight(height)
+            #self.setMinimumHeight(height)
+            #self.setMaximumHeight(height)
 
 
     # Create new Node class
@@ -174,7 +174,7 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
         op_code = class_code
         op_title = node_name
         content_label_objname = class_name.lower().replace(" ", "_")
-        category = "WAS NODES"
+        category = node_class.CATEGORY#"WAS NODES"
         NodeContent_class = Widget
         dim = (340, 180)
         output_data_ports = outputs
@@ -195,7 +195,9 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
             if len(outputs) > len(inputs):
                 modifier = len(outputs)
 
-            self.grNode.height = 125 + self.content.minimumHeight() + (40 * modifier)
+            self.content.setGeometry(0, 15, self.content.geometry().width(), self.content.geometry().height())
+
+            self.grNode.height = self.content.geometry().height() + (modifier * 30)
 
             self.update_all_sockets()
 
@@ -216,7 +218,7 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
                     data = getattr(self.content, adapted_input['name']).value()
                 elif adapted_input['type'] == 'STRING':
                     data = getattr(self.content, adapted_input['name']).text()
-                elif adapted_input['type'] == 'MULTI_STRING':
+                elif adapted_input['type'] in ['MULTI_STRING', 'PROMPT']:
                     data = getattr(self.content, adapted_input['name']).toPlainText()
                 elif adapted_input['type'] in ['CROP_DATA', 'IMAGE_BOUNDS']:
                     data = getattr(self.content, adapted_input['name']).text()
@@ -232,7 +234,10 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
             #     x += 1
             #     print(x)
 
-            print(data_inputs)
+            #print(data_inputs)
+
+            print("COLLECTED COMFY INPUTS", data_inputs)
+
             result = self.fn(self, *data_inputs)
             x = 0
             for output in self.ordered_outputs:
@@ -240,9 +245,8 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
                     image = result[x]
                     pil = tensor2pil(image)
                     self.setOutput(x, [pil_image_to_pixmap(pil)])
+            print("RAN COMFY NODE", self.op_title, "in aiNodes Engine")
 
-
-            print(result)
 
 
     # Register the node
@@ -263,7 +267,7 @@ def get_node_parameters(node_class):
     for key, value in node_class.INPUT_TYPES().items():
         for value_name, value_params in value.items():
 
-            print("VALUE", value_name, value_params)
+
 
             ordered_inputs.append((value_name, value_params))
 
@@ -280,6 +284,8 @@ for node_name, node_class in WAS_Node_Suite.NODE_CLASS_MAPPINGS.items():
     #print(node_class.INPUT_TYPES())
 
     ordered_inputs = get_node_parameters(node_class)
+
+    print("ORDERED INPUTS #1", ordered_inputs)
 
     inputs = []
     input_names = []
@@ -323,12 +329,12 @@ for node_name, node_class in WAS_Node_Suite.NODE_CLASS_MAPPINGS.items():
             outputs.append(3)
         elif i in ["VAE", "CLIP", "MODEL"]:
             outputs.append(4)
-        if i in ["LATENT", "IMAGE", "MASK", "CONDITIONING", "EXTRA_PNGINFO", "VAE", "CLIP", "MODEL", "STRING", "NUMBER"]:
+        if i in ["LATENT", "IMAGE", "MASK", "MASKS", "CONDITIONING", "EXTRA_PNGINFO", "VAE", "CLIP", "MODEL", "STRING", "NUMBER"]:
             output_names.append(i)
-
-
         ordered_outputs.append(data)
     output_names.append('EXEC')
+
+    print("CREATED OUTPUT NAMES", output_names)
 
     ordered_outputs.append(output_names)
     outputs.append(1)
