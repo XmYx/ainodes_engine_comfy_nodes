@@ -73,6 +73,13 @@ defaults = {"FLOAT":{"min":0.0,
             }
 
 def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, outputs, fn):
+
+    input_names = ordered_inputs.pop(len(ordered_inputs) - 1)
+    output_names = ordered_outputs.pop(len(ordered_outputs) - 1)
+
+
+    print("INPUT NAMES BECAME", input_names)
+
     class_name = node_name.replace(" ", "")
     #class_code = "OP_NODE_" + class_name.upper()
     class_code = get_next_opcode()
@@ -85,7 +92,7 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
             height = 0
             for input_item in ordered_inputs:
 
-                print("INPUT ITEM", input_item)
+                #print("INPUT ITEM", input_item)
 
                 tp = input_item[1][0]
                 if type(tp) == str:
@@ -96,7 +103,7 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
                         max_val = defaults[tp]['max']
                         def_val = defaults[tp]['default']
                         step_val = defaults[tp]['step']
-                        print("SOURCE", source)
+                        #print("SOURCE", source)
                         if len(list(source)) > 1:
                             if 'min' in source[1]:
                                 min_val = source[1]['min']
@@ -114,8 +121,8 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
                             setattr(self, input_item[0], self.create_double_spin_box(label_text=input_item[0], min_val=min_val, max_val=max_val, step=step_val, default_val=def_val))
                         elif tp in ['INT', 'NUMBER']:
                             setattr(self, input_item[0], self.create_spin_box(label_text=input_item[0], min_val=int(min_val), max_val=int(max_val), step_value=int(step_val), default_val=int(def_val)))
-                        height += 40
-                    elif tp in ['STRING', 'CROP_DATA', 'IMAGE_BOUNDS']:
+                        height += 50
+                    elif tp in ['STRING', 'CROP_DATA', 'IMAGE_BOUNDS', 'PROMPT']:
 
 
                         default = 'default_placeholder'
@@ -125,6 +132,9 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
                                 multiline = source[1]['multiline']
                             if 'default' in source[1]:
                                 default = source[1]['default']
+                        if tp == 'PROMPT':
+                            multiline = True
+                            default = "Prompt"
                         if multiline:
                             setattr(self, input_item[0], self.create_text_edit(input_item[0], placeholder=default))
                             tp = 'MULTI_STRING'
@@ -132,7 +142,7 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
 
                         else:
                             setattr(self, input_item[0], self.create_line_edit(input_item[0], default=default, placeholder=default))
-                            height += 40
+                            height += 50
 
                     self.input_adapted.append({"type":tp,
                                                "name":input_item[0]})
@@ -145,10 +155,12 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
                             self.create_combo_box(input_item[1][0], input_item[0], accessible_name=input_item[0]))
                     self.input_adapted.append({"type":"COMBOBOX",
                                                "name":input_item[0]})
-                    height += 40
-            self.setMinimumHeight(height)
+                    height += 50
 
             self.create_main_layout(grid=1)
+            self.setMinimumHeight(height)
+            self.setMaximumHeight(height)
+
 
     # Create new Node class
     class Node(AiNode, node_class):
@@ -160,13 +172,16 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
                     "OpenAI node emits it's prompt in a data line,\n" \
                     "but you'll find this info in all relevant places."
         op_code = class_code
-        op_title = class_name
-        content_label_objname = node_name.lower().replace(" ", "_")
+        op_title = node_name
+        content_label_objname = class_name.lower().replace(" ", "_")
         category = "WAS NODES"
         NodeContent_class = Widget
         dim = (340, 180)
         output_data_ports = outputs
         exec_port = 0
+
+        custom_input_socket_name = input_names
+        custom_output_socket_name = output_names
 
         def __init__(self, scene):
             super().__init__(scene, inputs=inputs, outputs=outputs)
@@ -180,7 +195,7 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
             if len(outputs) > len(inputs):
                 modifier = len(outputs)
 
-            self.grNode.height = 75 + self.content.minimumHeight() + (35 * modifier)
+            self.grNode.height = 125 + self.content.minimumHeight() + (40 * modifier)
 
             self.update_all_sockets()
 
@@ -191,7 +206,7 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
             x = 0
             for adapted_input in self.content.input_adapted:
                 data = f"Not Found {adapted_input['name']}"
-                if adapted_input['type'] in ['LATENT', 'IMAGE', 'CONDITIONING']:
+                if adapted_input['type'] in ['LATENT', 'IMAGE', 'CONDITIONING', 'EXTRA_PNGINFO']:
                     data = self.getInputData(x)
                     x += 1
                     if adapted_input['type'] == 'IMAGE':
@@ -203,7 +218,7 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
                     data = getattr(self.content, adapted_input['name']).text()
                 elif adapted_input['type'] == 'MULTI_STRING':
                     data = getattr(self.content, adapted_input['name']).toPlainText()
-                elif adapted_input['type'] == 'CROP_DATA':
+                elif adapted_input['type'] in ['CROP_DATA', 'IMAGE_BOUNDS']:
                     data = getattr(self.content, adapted_input['name']).text()
                     data = data.split(",")
                     data = tuple(int(item) for item in data)
@@ -238,7 +253,7 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
 # Import other modules that depend on comfy.clip_vision
 from .src.was_nodes import WAS_Node_Suite
 
-print("WAS INIT", WAS_Node_Suite.NODE_CLASS_MAPPINGS)
+#print("WAS INIT", WAS_Node_Suite.NODE_CLASS_MAPPINGS)
 
 
 def get_node_parameters(node_class):
@@ -247,6 +262,9 @@ def get_node_parameters(node_class):
 
     for key, value in node_class.INPUT_TYPES().items():
         for value_name, value_params in value.items():
+
+            print("VALUE", value_name, value_params)
+
             ordered_inputs.append((value_name, value_params))
 
     return ordered_inputs
@@ -264,6 +282,7 @@ for node_name, node_class in WAS_Node_Suite.NODE_CLASS_MAPPINGS.items():
     ordered_inputs = get_node_parameters(node_class)
 
     inputs = []
+    input_names = []
     outputs = []
     for i in ordered_inputs:
         if i[1][0] == "LATENT":
@@ -272,12 +291,21 @@ for node_name, node_class in WAS_Node_Suite.NODE_CLASS_MAPPINGS.items():
             inputs.append(5)
         elif i[1][0] == "CONDITIONING":
             inputs.append(3)
-        elif i[1][0] == "IMAGE_BOUNDS":
+        elif i[1][0] in ["EXTRA_PNGINFO"]:
             inputs.append(6)
+        elif i[1][0] in ["VAE", "CLIP", "MODEL"]:
+            inputs.append(4)
+        if i[1][0] in ["LATENT", "IMAGE", "MASK", "CONDITIONING", "EXTRA_PNGINFO", "VAE", "CLIP", "MODEL"]:
+            input_names.append(i[1][0])
+    input_names.append("EXEC")
+    ordered_inputs.append(input_names)
+        # elif i[1][0] == "IMAGE_BOUNDS":
+        #     inputs.append(6)
     #print("RESULT INPUTS", inputs)
 
     fn = getattr(node_class, node_class.FUNCTION)
     ordered_outputs = []
+    output_names = []
     x = 0
     for i in node_class.RETURN_TYPES:
         data = {}
@@ -293,9 +321,16 @@ for node_name, node_class in WAS_Node_Suite.NODE_CLASS_MAPPINGS.items():
             outputs.append(5)
         elif i == "CONDITIONING":
             outputs.append(3)
+        elif i in ["VAE", "CLIP", "MODEL"]:
+            outputs.append(4)
+        if i in ["LATENT", "IMAGE", "MASK", "CONDITIONING", "EXTRA_PNGINFO", "VAE", "CLIP", "MODEL", "STRING", "NUMBER"]:
+            output_names.append(i)
+
+
         ordered_outputs.append(data)
+    output_names.append('EXEC')
 
-
+    ordered_outputs.append(output_names)
     outputs.append(1)
     inputs.append(1)
     # Use the function
