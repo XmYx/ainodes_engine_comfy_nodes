@@ -1,3 +1,6 @@
+import torch
+loadBackup = torch.load
+
 from . import install_all_comfy_nodes
 
 
@@ -12,6 +15,7 @@ from ainodes_frontend.node_engine.node_content_widget import QDMNodeContentWidge
 # Create a dummy module
 comfy = types.ModuleType('comfy')
 server = types.ModuleType('server')
+shared = types.ModuleType('shared')
 comfy.clip_vision = types.ModuleType('comfy.clip_vision')
 comfy.clip_vision.encode = lambda: print('Dummy function called')
 
@@ -57,6 +61,7 @@ sys.modules['comfy.sd'] = comfy.sd
 sys.modules['comfy.utils'] = comfy.utils
 sys.modules['comfy'] = comfy
 sys.modules['server'] = server
+sys.modules['shared'] = shared
 sys.modules['folder_paths'] = folder_paths
 sys.modules['model_management'] = model_management
 sys.modules['comfy.model_management'] = model_management
@@ -285,23 +290,31 @@ def find_node_class_mappings(src_folder):
     node_class_mappings = []
 
     for root, dirs, files in os.walk(src_folder):
+        # Go through files in current directory
         for file in files:
             if file.endswith(".py"):
                 file_path = os.path.join(root, file)
 
                 module_name = os.path.splitext(file)[0]
+                print(module_name)
                 spec = importlib.util.spec_from_file_location(module_name, file_path)
                 module = importlib.util.module_from_spec(spec)
                 try:
                     spec.loader.exec_module(module)
                     if hasattr(module, "NODE_CLASS_MAPPINGS"):
-                        #print(module.NODE_CLASS_MAPPINGS)
                         node_class_mappings.append(module.NODE_CLASS_MAPPINGS)
                 except:
+                    print(module_name)
                     pass
-                    # print("FAIL", e)
-                    # continue
+
+        # After going through first level subdirectories, don't go any deeper
+        # level = root.replace(src_folder, '').count(os.sep)
+        # if level >= 1:
+        #     dirs.clear()
+
     return node_class_mappings
+
+
 
 # print(len(errors), "imports failed.\n\n")
 # print(errors)
@@ -333,6 +346,8 @@ def get_node_parameters(node_class):
             ordered_inputs.append((value_name, value_params))
 
     return ordered_inputs
+
+
 
 for mapping in node_class_mappings:
 
@@ -385,7 +400,7 @@ for mapping in node_class_mappings:
                     outputs.append(6)
                 elif i == "LATENT":
                     outputs.append(2)
-                elif i == "IMAGE":
+                elif i in ["IMAGE", "MASK"]:
                     outputs.append(5)
                 elif i == "CONDITIONING":
                     outputs.append(3)
@@ -405,14 +420,8 @@ for mapping in node_class_mappings:
             create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, outputs, fn=fn)
         except:
             print("Failed to import", node_name, node_class)
-
-
 # test_subject = list(WAS_Node_Suite.NODE_CLASS_MAPPINGS.values())[0]
 #
 # print(test_subject.INPUT_TYPES())
 
-
-
-
-
-
+torch.load = loadBackup
