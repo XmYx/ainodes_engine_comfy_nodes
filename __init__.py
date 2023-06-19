@@ -1,3 +1,8 @@
+from . import install_all_comfy_nodes
+
+
+import importlib
+import os
 import types
 import sys
 from ainodes_frontend import singleton as gs
@@ -6,6 +11,7 @@ from ainodes_frontend.node_engine.node_content_widget import QDMNodeContentWidge
 
 # Create a dummy module
 comfy = types.ModuleType('comfy')
+server = types.ModuleType('server')
 comfy.clip_vision = types.ModuleType('comfy.clip_vision')
 comfy.clip_vision.encode = lambda: print('Dummy function called')
 
@@ -50,8 +56,10 @@ sys.modules['comfy.samplers'] = comfy.samplers
 sys.modules['comfy.sd'] = comfy.sd
 sys.modules['comfy.utils'] = comfy.utils
 sys.modules['comfy'] = comfy
+sys.modules['server'] = server
 sys.modules['folder_paths'] = folder_paths
 sys.modules['model_management'] = model_management
+sys.modules['comfy.model_management'] = model_management
 sys.modules['comfy_extras'] = comfy_extras
 sys.modules['comfy_extras.chainner_models'] = comfy_extras.chainner_models
 sys.modules['comfy_extras.chainner_models.model_loading'] = comfy_extras.chainner_models.model_loading
@@ -174,7 +182,7 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
         op_code = class_code
         op_title = node_name
         content_label_objname = class_name.lower().replace(" ", "_")
-        category = node_class.CATEGORY#"WAS NODES"
+        category = f"ComfyUI_Extras/{node_class.CATEGORY}"#"WAS NODES"
         NodeContent_class = Widget
         dim = (340, 180)
         output_data_ports = outputs
@@ -202,9 +210,9 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
             self.update_all_sockets()
 
         def evalImplementation_thread(self):
-            from .src.was_nodes.WAS_Node_Suite import pil2tensor, tensor2pil
+            from .src.custom_nodes.was_node_suite_comfyui.WAS_Node_Suite import pil2tensor, tensor2pil
 
-            data_inputs = []
+            data_inputs = {}
             x = 0
             for adapted_input in self.content.input_adapted:
                 data = f"Not Found {adapted_input['name']}"
@@ -226,7 +234,7 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
                     data = tuple(int(item) for item in data)
                 elif adapted_input['type'] == 'COMBOBOX':
                     data = getattr(self.content, adapted_input['name']).currentText()
-                data_inputs.append(data)
+                data_inputs[adapted_input['name']] = data
 
             # for i in range(len(self.inputs)):
             #     data = self.getInputData(x)
@@ -236,9 +244,9 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
 
             #print(data_inputs)
 
-            print("COLLECTED COMFY INPUTS", data_inputs)
+            #print("COLLECTED COMFY INPUTS", data_inputs)
 
-            result = self.fn(self, *data_inputs)
+            result = self.fn(self, **data_inputs)
             x = 0
             for output in self.ordered_outputs:
                 if output['type'] == 'IMAGE':
@@ -255,7 +263,60 @@ def create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, 
     # Store the node in node class mapping
     #node_class_map[node_name] = Node
 # Import other modules that depend on comfy.clip_vision
-from .src.was_nodes import WAS_Node_Suite
+
+
+import os
+import importlib.util
+
+src = "custom_nodes/ainodes_engine_comfy_nodes/src"
+src = os.path.join(os.getcwd(), src)
+
+original_sys_path = sys.path
+#sys.path = [src]
+# custom_nodes = types.ModuleType('custom_nodes')
+#
+# # Add the dummy module to sys.modules
+# sys.modules['custom_nodes'] = custom_nodes
+#print(src)
+
+errors = []
+
+def find_node_class_mappings(src_folder):
+    node_class_mappings = []
+
+    for root, dirs, files in os.walk(src_folder):
+        for file in files:
+            if file.endswith(".py"):
+                file_path = os.path.join(root, file)
+
+                module_name = os.path.splitext(file)[0]
+                spec = importlib.util.spec_from_file_location(module_name, file_path)
+                module = importlib.util.module_from_spec(spec)
+                try:
+                    spec.loader.exec_module(module)
+                    if hasattr(module, "NODE_CLASS_MAPPINGS"):
+                        #print(module.NODE_CLASS_MAPPINGS)
+                        node_class_mappings.append(module.NODE_CLASS_MAPPINGS)
+                except:
+                    pass
+                    # print("FAIL", e)
+                    # continue
+    return node_class_mappings
+
+# print(len(errors), "imports failed.\n\n")
+# print(errors)
+
+#sys.path = original_sys_path
+
+src_folder = "custom_nodes/ainodes_engine_comfy_nodes/src"
+node_class_mappings = find_node_class_mappings(src_folder)
+
+# src_folder = "custom_nodes/ainodes_engine_comfy_nodes/src/extras"
+# extra_node_class_mappings = find_node_class_mappings(src_folder)
+#
+# node_class_mappings = node_class_mappings + extra_node_class_mappings
+
+#from .src.was_nodes import WAS_Node_Suite
 
 #print("WAS INIT", WAS_Node_Suite.NODE_CLASS_MAPPINGS)
 
@@ -273,74 +334,77 @@ def get_node_parameters(node_class):
 
     return ordered_inputs
 
+for mapping in node_class_mappings:
 
+    #for node_name, node_class in WAS_Node_Suite.NODE_CLASS_MAPPINGS.items():
+    for node_name, node_class in mapping.items():
 
-for node_name, node_class in WAS_Node_Suite.NODE_CLASS_MAPPINGS.items():
+        #print(node_name.lower().replace(" ", "_"))
 
-    #print(node_name.lower().replace(" ", "_"))
+        node_content_class = node_name.lower().replace(" ", "_")
 
-    node_content_class = node_name.lower().replace(" ", "_")
+        #print(node_class.INPUT_TYPES())
+        try:
+            ordered_inputs = get_node_parameters(node_class)
 
-    #print(node_class.INPUT_TYPES())
+            #print("ORDERED INPUTS #1", ordered_inputs)
 
-    ordered_inputs = get_node_parameters(node_class)
+            inputs = []
+            input_names = []
+            outputs = []
+            for i in ordered_inputs:
+                if i[1][0] == "LATENT":
+                    inputs.append(2)
+                elif i[1][0] in ["IMAGE", "MASK"]:
+                    inputs.append(5)
+                elif i[1][0] == "CONDITIONING":
+                    inputs.append(3)
+                elif i[1][0] in ["EXTRA_PNGINFO"]:
+                    inputs.append(6)
+                elif i[1][0] in ["VAE", "CLIP", "MODEL"]:
+                    inputs.append(4)
+                if i[1][0] in ["LATENT", "IMAGE", "MASK", "CONDITIONING", "EXTRA_PNGINFO", "VAE", "CLIP", "MODEL"]:
+                    input_names.append(i[1][0])
+            input_names.append("EXEC")
+            ordered_inputs.append(input_names)
+                # elif i[1][0] == "IMAGE_BOUNDS":
+                #     inputs.append(6)
+            #print("RESULT INPUTS", inputs)
 
-    print("ORDERED INPUTS #1", ordered_inputs)
+            fn = getattr(node_class, node_class.FUNCTION)
+            ordered_outputs = []
+            output_names = []
+            x = 0
+            for i in node_class.RETURN_TYPES:
+                data = {}
+                data['type'] = i
+                data['name'] = "DEFAULT"
+                if hasattr(node_class, "RETURN_NAMES"):
+                    data['name'] = node_class.RETURN_NAMES[x]
+                if i in ["STRING", "NUMBER"]:
+                    outputs.append(6)
+                elif i == "LATENT":
+                    outputs.append(2)
+                elif i == "IMAGE":
+                    outputs.append(5)
+                elif i == "CONDITIONING":
+                    outputs.append(3)
+                elif i in ["VAE", "CLIP", "MODEL"]:
+                    outputs.append(4)
+                if i in ["LATENT", "IMAGE", "MASK", "MASKS", "CONDITIONING", "EXTRA_PNGINFO", "VAE", "CLIP", "MODEL", "STRING", "NUMBER"]:
+                    output_names.append(i)
+                ordered_outputs.append(data)
+            output_names.append('EXEC')
 
-    inputs = []
-    input_names = []
-    outputs = []
-    for i in ordered_inputs:
-        if i[1][0] == "LATENT":
-            inputs.append(2)
-        elif i[1][0] in ["IMAGE", "MASK"]:
-            inputs.append(5)
-        elif i[1][0] == "CONDITIONING":
-            inputs.append(3)
-        elif i[1][0] in ["EXTRA_PNGINFO"]:
-            inputs.append(6)
-        elif i[1][0] in ["VAE", "CLIP", "MODEL"]:
-            inputs.append(4)
-        if i[1][0] in ["LATENT", "IMAGE", "MASK", "CONDITIONING", "EXTRA_PNGINFO", "VAE", "CLIP", "MODEL"]:
-            input_names.append(i[1][0])
-    input_names.append("EXEC")
-    ordered_inputs.append(input_names)
-        # elif i[1][0] == "IMAGE_BOUNDS":
-        #     inputs.append(6)
-    #print("RESULT INPUTS", inputs)
+            #print("CREATED OUTPUT NAMES", output_names)
 
-    fn = getattr(node_class, node_class.FUNCTION)
-    ordered_outputs = []
-    output_names = []
-    x = 0
-    for i in node_class.RETURN_TYPES:
-        data = {}
-        data['type'] = i
-        data['name'] = "DEFAULT"
-        if hasattr(node_class, "RETURN_NAMES"):
-            data['name'] = node_class.RETURN_NAMES[x]
-        if i in ["STRING", "NUMBER"]:
-            outputs.append(6)
-        elif i == "LATENT":
-            outputs.append(2)
-        elif i == "IMAGE":
-            outputs.append(5)
-        elif i == "CONDITIONING":
-            outputs.append(3)
-        elif i in ["VAE", "CLIP", "MODEL"]:
-            outputs.append(4)
-        if i in ["LATENT", "IMAGE", "MASK", "MASKS", "CONDITIONING", "EXTRA_PNGINFO", "VAE", "CLIP", "MODEL", "STRING", "NUMBER"]:
-            output_names.append(i)
-        ordered_outputs.append(data)
-    output_names.append('EXEC')
-
-    print("CREATED OUTPUT NAMES", output_names)
-
-    ordered_outputs.append(output_names)
-    outputs.append(1)
-    inputs.append(1)
-    # Use the function
-    create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, outputs, fn=fn)
+            ordered_outputs.append(output_names)
+            outputs.append(1)
+            inputs.append(1)
+            # Use the function
+            create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, outputs, fn=fn)
+        except:
+            print("Failed to import", node_name, node_class)
 
 
 # test_subject = list(WAS_Node_Suite.NODE_CLASS_MAPPINGS.values())[0]
