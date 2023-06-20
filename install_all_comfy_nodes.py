@@ -13,8 +13,8 @@ def parse_custom_nodes_json():
     json_data = response.json()
 
     # Create the destination folders if they don't exist
-    custom_nodes_folder = "custom_nodes/ainodes_engine_comfy_nodes/src/custom_nodes"
-    extras_folder = "custom_nodes/ainodes_engine_comfy_nodes/src/extras"
+    custom_nodes_folder = "ai_nodes/ainodes_engine_comfy_nodes/src/ai_nodes"
+    extras_folder = "ai_nodes/ainodes_engine_comfy_nodes/src/extras"
     os.makedirs(custom_nodes_folder, exist_ok=True)
     os.makedirs(extras_folder, exist_ok=True)
 
@@ -24,7 +24,7 @@ def parse_custom_nodes_json():
         files = node["files"]
 
         if install_type == "git-clone":
-            # Git clone the repository to the custom_nodes folder
+            # Git clone the repository to the ai_nodes folder
             for file_url in files:
                 repo_name = file_url.split("/")[-1]
                 git_clone_folder = os.path.join(custom_nodes_folder, repo_name.replace("-", "_"))
