@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from PIL import Image
+from qtpy.QtWidgets import QTextEdit, QLineEdit
 
 from ai_nodes.ainodes_engine_base_nodes.ainodes_backend import pixmap_to_tensor, tensor_image_to_pixmap
 
@@ -202,9 +203,9 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
                         multiline = False
                         if "multiline" in ui_input[1][1]:
                             multiline = ui_input[1][1]
-                        if multiline:
+                        if isinstance(widget, QTextEdit):
                             data = widget.toPlainText()
-                        else:
+                        elif isinstance(widget, QLineEdit):
                             data = widget.text()
                         if data != "":
                             data_inputs[ui_input[0].lower()] = data
@@ -220,7 +221,7 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
             for i in list(self.adapted_outputs):
 
                 if i != "EXEC":
-                    print(i, x, result[x])
+                    #print(i, x, result[x])
                     self.setOutput(x, result[x])
                 x += 1
 
