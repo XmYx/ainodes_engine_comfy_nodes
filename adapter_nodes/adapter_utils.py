@@ -1,0 +1,321 @@
+import numpy as np
+import torch
+from PIL import Image
+from qtpy.QtWidgets import QTextEdit, QLineEdit
+
+from ai_nodes.ainodes_engine_base_nodes.ainodes_backend import pixmap_to_tensor, tensor_image_to_pixmap
+
+loadBackup = torch.load
+
+#from . import install_all_comfy_nodes
+
+
+from ainodes_frontend.base import register_node, AiNode, register_node_now, get_next_opcode
+from ainodes_frontend.node_engine.node_content_widget import QDMNodeContentWidget
+
+
+default_numeric = {"FLOAT":{"min":0.0,
+                     "max":100.0,
+                     "default":1.0,
+                     "step":0.01},
+            "INT":  {"min":0,
+                     "max":100,
+                     "default":1,
+                     "step":1},
+            "NUMBER":{"min":0,
+                     "max":1,
+                     "default":1,
+                     "step":1},
+            }
+
+
+data_subtypes = ["STRING", "PROMPT", "NUMBER", "FLOAT"]
+
+def tensor2pil(image):
+    return Image.fromarray(np.clip(255. * image.cpu().numpy().squeeze(), 0, 255).astype(np.uint8))
+
+
+# PIL to Tensor
+def pil2tensor(image):
+    return torch.from_numpy(np.array(image).astype(np.float32) / 255.0).unsqueeze(0)
+
+
+
+
+def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, output_names, category_input):
+
+
+
+    class_name = node_name.replace(" ", "")
+    class_code = get_next_opcode()
+
+    # Create new Widget class
+    class Widget(QDMNodeContentWidget):
+        def get_widget(self, widget_type):
+            widget_types = {"INT":self.create_spin_box,
+                            "FLOAT":self.create_double_spin_box,
+                            "STRING":self.create_line_edit,
+                            "MULTISTRING":self.create_text_edit
+                            }
+            if widget_type in widget_types:
+                return widget_types[widget_type], True
+            else:
+                return self.create_line_edit, False
+
+        def create_widget(self, widget_name, widget_type, widget_params):
+
+            widget, known = self.get_widget(widget_type)
+
+            if known:
+                if widget_type in default_numeric.keys():
+
+                    min_val = default_numeric[widget_type]['min']
+                    max_val = default_numeric[widget_type]['max']
+                    def_val = default_numeric[widget_type]['default']
+                    step_val = default_numeric[widget_type]['step']
+                    if 'min' in widget_params:
+                        min_val = widget_params['min']
+                    if 'max' in widget_params:
+                        max_val = widget_params['max']
+                    if 'default' in widget_params:
+                        def_val = widget_params['default']
+                    if 'step' in widget_params:
+                        step_val = widget_params['step']
+                    if min_val < -2147483648:
+                        min_val = -2147483647
+                    if max_val > 2147483647:
+                        max_val = 2147483647
+                    setattr(self, widget_name, widget(label_text=widget_name, min_val=min_val, max_val=max_val, step=step_val, default_val=def_val))
+                else:
+                    default = 'default_placeholder'
+                    multiline = False
+                    if 'multiline' in widget_params:
+                        multiline = widget_params['multiline']
+                    if 'default' in widget_params:
+                        default = widget_params['default']
+                    if widget_type == 'PROMPT':
+                        multiline = True
+                        default = "Prompt"
+                    if multiline:
+                        setattr(self, widget_name, self.create_text_edit(widget_name, default=default))
+                        #height += 100
+
+                    else:
+                        setattr(self, widget_name, self.create_line_edit(widget_name, default=default, placeholder=default))
+                        #height += 50
+            else:
+                setattr(self, widget_name, widget)
+
+        def initUI(self):
+            for item in ui_inputs:
+                #print(item)
+                tp = item[1][0]
+                if type(tp) == str:
+                    # source = item[1]
+                    name = item[0]
+                    widget_type = item[1][0]
+                    widget_params = item[1][1]
+                    self.create_widget(name, widget_type, widget_params)
+                elif type(tp) == list:
+                    combobox_name = item[0]
+                    combobox_items = item[1][0]
+                    setattr(self, combobox_name,
+                            self.create_combo_box(combobox_items, combobox_name, accessible_name=combobox_name))
+                else:
+                    print("OTHER ITEM", type(tp), item)
+
+            self.create_main_layout(grid=1)
+
+
+    # Create new Node class
+    class Node(AiNode, node_class):
+        icon = "ainodes_frontend/icons/base_nodes/v2/experimental.png"
+        help_text = "Data objects in aiNodes are simple dictionaries,\n" \
+                    "that can hold any values under any name.\n" \
+                    "In most cases, you'll find them drive parameters,\n" \
+                    "or hold sequences of images. For an example, the\n" \
+                    "OpenAI node emits it's prompt in a data line,\n" \
+                    "but you'll find this info in all relevant places."
+        op_code = class_code
+        op_title = node_name
+        content_label_objname = class_name.lower().replace(" ", "_")
+        category = f"{category_input}/{node_class.CATEGORY}"#"WAS NODES"
+        NodeContent_class = Widget
+        dim = (340, 180)
+        output_data_ports = outputs
+        exec_port = len(outputs)
+
+        custom_input_socket_name = input_names
+        custom_output_socket_name = output_names
+
+        def __init__(self, scene):
+            super().__init__(scene, inputs=inputs, outputs=outputs)
+
+            self.fn = getattr(node_class, node_class.FUNCTION)
+
+            self.output_names = output_names
+            self.output_types = outputs
+
+            self.exec_port = len(self.outputs) - 1
+
+            modifier = len(inputs)
+            if len(outputs) > len(inputs):
+                modifier = len(outputs)
+
+            self.content.setGeometry(0, 15, self.content.geometry().width(), self.content.geometry().height())
+
+            self.grNode.height = self.content.geometry().height() + (modifier * 30)
+
+            self.update_all_sockets()
+
+            self.adapted_inputs = (input_names, ui_inputs)
+            self.adapted_outputs = output_names
+
+        def evalImplementation_thread(self):
+
+            data_inputs = {}
+            x = 0
+
+            for input in self.adapted_inputs[0]:
+                data = None
+                if input != "EXEC":
+
+                    data = self.getInputData(x)
+
+
+                if data is not None:
+                    data_inputs[input.lower()] = data
+                x += 1
+
+
+            for ui_input in self.adapted_inputs[1]:
+
+                input_type = ui_input[1][0]
+                input_name = ui_input[0]
+                widget = getattr(self.content, input_name)
+
+
+                if isinstance(input_type, str):
+                    if input_type in default_numeric.keys():
+                        data = widget.value()
+                        data_inputs[ui_input[0].lower()] = data
+                    else:
+                        multiline = False
+                        if "multiline" in ui_input[1][1]:
+                            multiline = ui_input[1][1]
+                        if isinstance(widget, QTextEdit):
+                            data = widget.toPlainText()
+                        elif isinstance(widget, QLineEdit):
+                            data = widget.text()
+                        if data != "":
+                            data_inputs[ui_input[0].lower()] = data
+                elif isinstance(input_type, list):
+                    data = widget.currentText()
+                    if data != "":
+                        data_inputs[ui_input[0].lower()] = data
+
+            result = self.fn(self, **data_inputs)
+
+            x = 0
+
+            for i in list(self.adapted_outputs):
+
+                if i != "EXEC":
+                    #print(i, x, result[x])
+                    self.setOutput(x, result[x])
+                x += 1
+
+            return True
+
+        def onWorkerFinished(self, result):
+            self.busy = False
+            self.markDirty(False)
+            if result:
+                self.executeChild(self.exec_port)
+
+
+
+    register_node_now(class_code, Node)
+
+
+
+def get_node_parameters(node_class):
+
+    ordered_inputs = []
+
+    for key, value in node_class.INPUT_TYPES().items():
+        for value_name, value_params in value.items():
+
+
+
+            ordered_inputs.append((value_name, value_params))
+
+    return ordered_inputs
+
+
+def parse_comfynode(node_name, node_class):
+    node_content_class = node_name.lower().replace(" ", "_")
+
+    # print(node_class.INPUT_TYPES())
+    try:
+        ordered_inputs = get_node_parameters(node_class)
+
+        # print("ORDERED INPUTS #1", ordered_inputs)
+
+        inputs = []
+        input_names = []
+        outputs = []
+        for i in ordered_inputs:
+            if i[1][0] == "LATENT":
+                inputs.append(2)
+            elif i[1][0] in ["IMAGE", "MASK"]:
+                inputs.append(5)
+            elif i[1][0] == "CONDITIONING":
+                inputs.append(3)
+            elif i[1][0] in ["EXTRA_PNGINFO", "EXTRA_SETTINGS", "DISCO_DIFFUSION_EXTRA_SETTINGS"]:
+                inputs.append(6)
+            elif i[1][0] in ["VAE", "CLIP", "MODEL", "GUIDED_DIFFUSION_MODEL", "GUIDED_CLIP"]:
+                inputs.append(4)
+            if i[1][0] in ["LATENT", "IMAGE", "MASK", "CONDITIONING", "EXTRA_PNGINFO", "VAE", "CLIP", "MODEL", "GUIDED_DIFFUSION_MODEL", "GUIDED_CLIP", "EXTRA_SETTINGS", "DISCO_DIFFUSION_EXTRA_SETTINGS"]:
+                input_names.append(i[1][0])
+        input_names.append("EXEC")
+        ordered_inputs.append(input_names)
+        # elif i[1][0] == "IMAGE_BOUNDS":
+        #     inputs.append(6)
+        # print("RESULT INPUTS", inputs)
+
+        fn = getattr(node_class, node_class.FUNCTION)
+        ordered_outputs = []
+        output_names = []
+        x = 0
+        for i in node_class.RETURN_TYPES:
+            data = {}
+            data['type'] = i
+            data['name'] = "DEFAULT"
+            if hasattr(node_class, "RETURN_NAMES"):
+                data['name'] = node_class.RETURN_NAMES[x]
+            if i in ["STRING", "NUMBER", "EXTRA_SETTINGS", "DISCO_DIFFUSION_EXTRA_SETTINGS"]:
+                outputs.append(6)
+            elif i == "LATENT":
+                outputs.append(2)
+            elif i in ["IMAGE", "MASK"]:
+                outputs.append(5)
+            elif i == "CONDITIONING":
+                outputs.append(3)
+            elif i in ["VAE", "CLIP", "MODEL", "GUIDED_DIFFUSION_MODEL", "GUIDED_CLIP"]:
+                outputs.append(4)
+            if i in ["LATENT", "IMAGE", "MASK", "MASKS", "CONDITIONING", "EXTRA_PNGINFO", "VAE", "CLIP", "MODEL", "GUIDED_DIFFUSION_MODEL", "GUIDED_CLIP",
+                     "STRING", "NUMBER", "EXTRA_SETTINGS", "DISCO_DIFFUSION_EXTRA_SETTINGS"]:
+                output_names.append(i)
+            ordered_outputs.append(data)
+        output_names.append('EXEC')
+
+        # print("CREATED OUTPUT NAMES", output_names)
+
+        ordered_outputs.append(output_names)
+        outputs.append(1)
+        inputs.append(1)
+        # Use the function
+        create_node(node_class, node_name, ordered_inputs, inputs, ordered_outputs, outputs, fn=fn)
+    except:
+        pass
