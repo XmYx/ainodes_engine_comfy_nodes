@@ -1,11 +1,20 @@
+import gc
+
 import numpy as np
-import torch
+from qtpy.QtCore import Signal, QObject
+from qtpy.QtWidgets import QSpinBox, QDoubleSpinBox, QComboBox
+from qtpy import QtCore
+
+from main import gs
+if gs.torch_available:
+
+    import torch
 from PIL import Image
 from qtpy.QtWidgets import QTextEdit, QLineEdit
 
-from ai_nodes.ainodes_engine_base_nodes.ainodes_backend import pixmap_to_tensor, tensor_image_to_pixmap
-
-loadBackup = torch.load
+#from ai_nodes.ainodes_engine_base_nodes.ainodes_backend import pixmap_to_tensor, tensor_image_to_pixmap
+if gs.torch_available:
+    loadBackup = torch.load
 
 #from . import install_all_comfy_nodes
 
@@ -51,6 +60,8 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
 
     # Create new Widget class
     class Widget(QDMNodeContentWidget):
+        finished = Signal()
+
         def get_widget(self, widget_type):
             widget_types = {"INT":self.create_spin_box,
                             "FLOAT":self.create_double_spin_box,
@@ -104,7 +115,20 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
                         setattr(self, widget_name, self.create_line_edit(widget_name, default=default, placeholder=default))
                         #height += 50
             else:
-                setattr(self, widget_name, widget)
+                created_widget = setattr(self, widget_name, widget)
+            # Now, connect the created_widget's signal to mark_node_dirty
+            for created_widget in self.widget_list:
+                if isinstance(created_widget, (QSpinBox, QDoubleSpinBox)):
+                    created_widget.valueChanged.connect(self.mark_node_dirty)
+                elif isinstance(created_widget, (QLineEdit, QTextEdit)):
+                    created_widget.textChanged.connect(self.mark_node_dirty)
+                elif isinstance(created_widget, QComboBox):
+                    created_widget.currentIndexChanged.connect(self.mark_node_dirty)
+
+        @QtCore.Slot()
+        def mark_node_dirty(self, value=None):
+            # print("marking")
+            self.node.markDirty(True)
 
         def initUI(self):
             for item in ui_inputs:
@@ -129,6 +153,7 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
 
     # Create new Node class
     class Node(AiNode, node_class):
+
         icon = "ainodes_frontend/icons/base_nodes/v2/experimental.png"
         help_text = "Data objects in aiNodes are simple dictionaries,\n" \
                     "that can hold any values under any name.\n" \
@@ -171,6 +196,8 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
             self.adapted_inputs = (input_names, ui_inputs)
             self.adapted_outputs = output_names
 
+            self.cache = {}
+        @torch.no_grad()
         def evalImplementation_thread(self):
 
             data_inputs = {}
@@ -179,21 +206,15 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
             for input in self.adapted_inputs[0]:
                 data = None
                 if input != "EXEC":
-
                     data = self.getInputData(x)
-
-
                 if data is not None:
                     data_inputs[input.lower()] = data
                 x += 1
 
-
             for ui_input in self.adapted_inputs[1]:
-
                 input_type = ui_input[1][0]
                 input_name = ui_input[0]
                 widget = getattr(self.content, input_name)
-
 
                 if isinstance(input_type, str):
                     if input_type in default_numeric.keys():
@@ -214,26 +235,59 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
                     if data != "":
                         data_inputs[ui_input[0].lower()] = data
 
-            result = self.fn(self, **data_inputs)
+            # Create a unique key for the current set of inputs
+            cache_key = str(sorted(data_inputs.items()))
 
+            # Check if the result is already in the cache
+            if cache_key in self.cache:
+                result = self.cache[cache_key]
+            else:
+                # If not in cache, compute the result and store it in the cache
+                result = self.fn(self, **data_inputs)
+                self.cache[cache_key] = result
+            del data_inputs
             x = 0
 
             for i in list(self.adapted_outputs):
-
                 if i != "EXEC":
-                    #print(i, x, result[x])
                     self.setOutput(x, result[x])
                 x += 1
+            self.markDirty(False)
+            self.content.update()
+            self.content.finished.emit()
+            gc.collect()
+            import comfy
+            comfy.model_management.soft_empty_cache()
 
             return True
 
-        def onWorkerFinished(self, result):
+        def onWorkerFinished(self, result, exec=True):
             self.busy = False
             self.markDirty(False)
-            if result:
-                self.executeChild(self.exec_port)
+            if exec:
+                if result:
+                    self.executeChild(self.exec_port)
 
+        def can_run(self):
+            if not self.inputs:
+                return True
 
+            def is_dirty_connected_node(edge, attribute):
+                socket = getattr(edge, attribute, None)
+                if socket and hasattr(socket, 'node') and socket.node != self:
+                    return socket.node.isDirty()
+                return False
+
+            for socket in self.inputs:
+                for edge in socket.edges:
+                    if is_dirty_connected_node(edge, 'start_socket') or is_dirty_connected_node(edge, 'end_socket'):
+                        print(f"Node {self} cannot run because connected node {socket.node} is dirty.")
+                        return False
+
+            return True
+
+        def onInputChanged(self, socket=None):
+            self.markDirty(True)
 
     register_node_now(class_code, Node)
 

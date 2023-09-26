@@ -6,6 +6,7 @@ import traceback
 
 from ai_nodes.ainodes_engine_comfy_nodes.adapter_nodes.adapter_utils import create_node
 
+
 # from ai_nodes.ainodes_engine_comfy_nodes.adapter_nodes.adapter_utils import parse_comfynode
 
 WAS = "GREAT"
@@ -13,7 +14,17 @@ WAS = "GREAT"
 import os, sys
 
 sys.path.extend([os.path.join(os.getcwd(), "src", "ComfyUI")])
+import sys
 
+import comfy.sample
+
+from ai_nodes.ainodes_engine_base_nodes.ainodes_backend.k_sampler import sample as ainodes_sample
+
+comfy.sample.sample = ainodes_sample
+
+from ainodes_frontend.base import modelmanagement_hijack
+
+#sys.modules['comfy.model_management'] = modelmanagement_hijack
 
 def load_comfy_node(module_path):
     module_name = os.path.basename(module_path)
@@ -50,7 +61,7 @@ def load_comfy_node(module_path):
 def load_comfy_nodes():
     node_paths = [os.path.join(os.getcwd(), "src/ComfyUI/custom_nodes")]
 
-    print("COMFY NODE PATHS", node_paths)
+    #print("COMFY NODE PATHS", node_paths)
     mappings = []
     node_import_times = []
     for custom_node_path in node_paths:
@@ -177,8 +188,8 @@ def parse_comfynode(node_name, node_class, category):
                     inputs.append(7)
                     input_names.append(i[0].upper())
 
-    inputs.append(1)
-    input_names.append('EXEC')
+    #inputs.append(1)
+    #input_names.append('EXEC')
 
     outputs = []
     output_names = []
@@ -190,9 +201,9 @@ def parse_comfynode(node_name, node_class, category):
             outputs.append(7)
         output_names.append(i)
 
-    outputs.append(1)
-    output_names.append('EXEC')
-    print("creating_node", node_class)
+    #outputs.append(1)
+    #output_names.append('EXEC')
+    #print("creating_node", node_class)
     node = create_node(node_class=node_class,
                        node_name=node_name,
                        ui_inputs=ui_inputs,
@@ -200,7 +211,7 @@ def parse_comfynode(node_name, node_class, category):
                        input_names=input_names,
                        outputs=outputs,
                        output_names=output_names,
-                        category_input=category)
+                       category_input=category)
 
 
 
@@ -219,17 +230,19 @@ def parse_comfynode(node_name, node_class, category):
 # for mapping in node_class_mappings:
 #     if mapping is not None:
 #         #print(mapping)
-import nodes
-for node_name, node_class in nodes.NODE_CLASS_MAPPINGS.items():
-    parse_comfynode(node_name, node_class, "ComfyUI Base")
+try:
+    import nodes
+    for node_name, node_class in nodes.NODE_CLASS_MAPPINGS.items():
+        parse_comfynode(node_name, node_class, "ComfyUI Base")
 
-node_class_mappings = load_comfy_nodes()
+    node_class_mappings = load_comfy_nodes()
 
-for mapping in node_class_mappings:
-    if mapping is not None:
-        for node_name, node_class in mapping.items():
-            parse_comfynode(node_name, node_class, "ComfyUI Extras")
-
+    for mapping in node_class_mappings:
+        if mapping is not None:
+            for node_name, node_class in mapping.items():
+                parse_comfynode(node_name, node_class, "ComfyUI Extras")
+except:
+    print('No Comfy nodes found')
 
 
 
