@@ -16,13 +16,13 @@ import os, sys
 sys.path.extend([os.path.join(os.getcwd(), "src", "ComfyUI")])
 import sys
 
-import comfy.sample
+#import comfy.sample
 
-from ai_nodes.ainodes_engine_base_nodes.ainodes_backend.k_sampler import sample as ainodes_sample
+#from ai_nodes.ainodes_engine_base_nodes.ainodes_backend.k_sampler import sample as ainodes_sample
 
-comfy.sample.sample = ainodes_sample
+#comfy.sample.sample = ainodes_sample
 
-from ainodes_frontend.base import modelmanagement_hijack
+#from ainodes_frontend.base import modelmanagement_hijack
 
 #sys.modules['comfy.model_management'] = modelmanagement_hijack
 
@@ -59,7 +59,7 @@ def load_comfy_node(module_path):
         return None
 
 def load_comfy_nodes():
-    node_paths = [os.path.join(os.getcwd(), "src/ComfyUI/custom_nodes")]
+    node_paths = [os.path.join(os.getcwd(), "src/ComfyUI/custom_nodes"), os.path.join(os.getcwd(), "src/ComfyUI/comfy_extras")]
 
     #print("COMFY NODE PATHS", node_paths)
     mappings = []
@@ -230,19 +230,19 @@ def parse_comfynode(node_name, node_class, category):
 # for mapping in node_class_mappings:
 #     if mapping is not None:
 #         #print(mapping)
-try:
-    import nodes
-    for node_name, node_class in nodes.NODE_CLASS_MAPPINGS.items():
-        parse_comfynode(node_name, node_class, "ComfyUI Base")
+# try:
+import nodes
+for node_name, node_class in nodes.NODE_CLASS_MAPPINGS.items():
+    parse_comfynode(node_name, node_class, "ComfyUI Base")
 
-    node_class_mappings = load_comfy_nodes()
+node_class_mappings = load_comfy_nodes()
 
-    for mapping in node_class_mappings:
-        if mapping is not None:
-            for node_name, node_class in mapping.items():
-                parse_comfynode(node_name, node_class, "ComfyUI Extras")
-except:
-    print('No Comfy nodes found')
+for mapping in node_class_mappings:
+    if mapping is not None:
+        for node_name, node_class in mapping.items():
+            parse_comfynode(node_name, node_class, "ComfyUI Extras")
+# except:
+#     print('No Comfy nodes found')
 
 
 

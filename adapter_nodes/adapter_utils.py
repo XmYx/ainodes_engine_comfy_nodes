@@ -197,7 +197,7 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
             self.adapted_outputs = output_names
 
             self.cache = {}
-        @torch.no_grad()
+        @torch.inference_mode()
         def evalImplementation_thread(self):
 
             data_inputs = {}
@@ -256,8 +256,6 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
             self.content.update()
             self.content.finished.emit()
             gc.collect()
-            import comfy
-            comfy.model_management.soft_empty_cache()
 
             return True
 
@@ -281,13 +279,41 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
             for socket in self.inputs:
                 for edge in socket.edges:
                     if is_dirty_connected_node(edge, 'start_socket') or is_dirty_connected_node(edge, 'end_socket'):
-                        print(f"Node {self} cannot run because connected node {socket.node} is dirty.")
+                        #print(f"Node {self} cannot run because connected node {socket.node} is dirty.")
                         return False
 
             return True
 
         def onInputChanged(self, socket=None):
             self.markDirty(True)
+
+        def remove(self):
+            # Delete attributes that were set during self.setOutput
+            for index in range(len(self.outputs)):
+                object_name = self.getID(index)
+                if hasattr(self, object_name):
+                    # If the value is a torch tensor and is on the GPU, delete it
+                    value = getattr(self, object_name)
+                    if isinstance(value, torch.Tensor) and value.is_cuda:
+                        value.cpu()
+                        del value
+                        torch.cuda.empty_cache()
+                    else:
+                        try:
+                            value.cpu()
+                        except:
+                            try:
+                                value.to("cpu")
+                            except:
+                                pass
+                        del value
+                        gc.collect()
+                    # Delete the attribute itself
+                    delattr(self, object_name)
+
+            # Clear the cache dictionary
+            self.cache.clear()
+            super().remove()
 
     register_node_now(class_code, Node)
 
