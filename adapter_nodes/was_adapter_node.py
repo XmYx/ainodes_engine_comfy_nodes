@@ -13,7 +13,7 @@ WAS = "GREAT"
 
 import os, sys
 
-sys.path.extend([os.path.join(os.getcwd(), "src", "ComfyUI")])
+#sys.path.extend([os.path.join(os.getcwd(), "src", "ComfyUI")])
 import sys
 
 #import comfy.sample
@@ -232,6 +232,7 @@ def parse_comfynode(node_name, node_class, category):
 #         #print(mapping)
 # try:
 import nodes
+
 for node_name, node_class in nodes.NODE_CLASS_MAPPINGS.items():
     parse_comfynode(node_name, node_class, "ComfyUI Base")
 

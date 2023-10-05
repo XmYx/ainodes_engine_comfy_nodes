@@ -5,7 +5,7 @@ from qtpy.QtCore import Signal, QObject
 from qtpy.QtWidgets import QSpinBox, QDoubleSpinBox, QComboBox
 from qtpy import QtCore
 
-from main import gs
+from ainodes_frontend import singleton as gs
 if gs.torch_available:
 
     import torch
@@ -51,7 +51,7 @@ def pil2tensor(image):
 
 
 
-def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, output_names, category_input):
+def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, output_names, category_input, fn=None):
 
 
 
@@ -79,45 +79,40 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
 
             if known:
                 if widget_type in default_numeric.keys():
+                    numeric_defaults = default_numeric[widget_type]
+                    min_val = widget_params.get('min', numeric_defaults['min'])
+                    max_val = widget_params.get('max', numeric_defaults['max'])
+                    def_val = widget_params.get('default', numeric_defaults['default'])
+                    step_val = widget_params.get('step', numeric_defaults['step'])
+                    if widget_type == "INT":
+                        min_val = int(min_val)
+                        max_val = int(max_val)
+                        def_val = int(def_val)
+                        step_val = int(step_val)
+                    min_val = max(min_val, -2147483647)
+                    max_val = min(max_val, 2147483647)
 
-                    min_val = default_numeric[widget_type]['min']
-                    max_val = default_numeric[widget_type]['max']
-                    def_val = default_numeric[widget_type]['default']
-                    step_val = default_numeric[widget_type]['step']
-                    if 'min' in widget_params:
-                        min_val = widget_params['min']
-                    if 'max' in widget_params:
-                        max_val = widget_params['max']
-                    if 'default' in widget_params:
-                        def_val = widget_params['default']
-                    if 'step' in widget_params:
-                        step_val = widget_params['step']
-                    if min_val < -2147483648:
-                        min_val = -2147483647
-                    if max_val > 2147483647:
-                        max_val = 2147483647
-                    setattr(self, widget_name, widget(label_text=widget_name, min_val=min_val, max_val=max_val, step=step_val, default_val=def_val))
+                    setattr(self, widget_name,
+                            widget(label_text=widget_name, min_val=min_val, max_val=max_val, step=step_val,
+                                   default_val=def_val))
                 else:
-                    default = 'default_placeholder'
-                    multiline = False
-                    if 'multiline' in widget_params:
-                        multiline = widget_params['multiline']
-                    if 'default' in widget_params:
-                        default = widget_params['default']
+                    default = widget_params.get('default', 'default_placeholder')
+                    multiline = widget_params.get('multiline', False)
+
                     if widget_type == 'PROMPT':
                         multiline = True
                         default = "Prompt"
-                    if multiline:
-                        setattr(self, widget_name, self.create_text_edit(widget_name, default=default))
-                        #height += 100
 
+                    if multiline:
+                        setattr(self, widget_name, self.create_text_edit(widget_name, default=str(default)))
                     else:
-                        setattr(self, widget_name, self.create_line_edit(widget_name, default=default, placeholder=default))
-                        #height += 50
+                        setattr(self, widget_name,
+                                self.create_line_edit(widget_name, default=str(default), placeholder=str(default)))
             else:
-                created_widget = setattr(self, widget_name, widget)
-            # Now, connect the created_widget's signal to mark_node_dirty
-            for created_widget in self.widget_list:
+                setattr(self, widget_name, widget)
+
+            # Connect the created_widget's signal to mark_node_dirty
+            for created_widget in getattr(self, 'widget_list', []):
                 if isinstance(created_widget, (QSpinBox, QDoubleSpinBox)):
                     created_widget.valueChanged.connect(self.mark_node_dirty)
                 elif isinstance(created_widget, (QLineEdit, QTextEdit)):
@@ -164,7 +159,7 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
         op_code = class_code
         op_title = node_name
         content_label_objname = class_name.lower().replace(" ", "_")
-        category = f"{category_input}/{node_class.CATEGORY}"#"WAS NODES"
+        category = f"{category_input}/{node_class.CATEGORY if hasattr(node_class, 'CATEGORY') else 'Diffusers'}"#"WAS NODES"
         NodeContent_class = Widget
         dim = (340, 180)
         output_data_ports = outputs
@@ -175,8 +170,7 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
 
         def __init__(self, scene):
             super().__init__(scene, inputs=inputs, outputs=outputs)
-
-            self.fn = getattr(node_class, node_class.FUNCTION)
+            self.fn = fn if fn else getattr(node_class, node_class.FUNCTION, None)
 
             self.output_names = output_names
             self.output_types = outputs
