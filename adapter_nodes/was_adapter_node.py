@@ -188,8 +188,8 @@ def parse_comfynode(node_name, node_class, category):
                     inputs.append(7)
                     input_names.append(i[0].upper())
 
-    #inputs.append(1)
-    #input_names.append('EXEC')
+    inputs.append(1)
+    input_names.append('EXEC')
 
     outputs = []
     output_names = []
@@ -201,8 +201,8 @@ def parse_comfynode(node_name, node_class, category):
             outputs.append(7)
         output_names.append(i)
 
-    #outputs.append(1)
-    #output_names.append('EXEC')
+    outputs.append(1)
+    output_names.append('EXEC')
     #print("creating_node", node_class)
     node = create_node(node_class=node_class,
                        node_name=node_name,

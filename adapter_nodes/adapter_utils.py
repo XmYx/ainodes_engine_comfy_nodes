@@ -1,4 +1,5 @@
 import gc
+import secrets
 
 import numpy as np
 from qtpy.QtCore import Signal, QObject
@@ -27,11 +28,11 @@ default_numeric = {"FLOAT":{"min":0.0,
                      "max":100.0,
                      "default":1.0,
                      "step":0.01},
-            "INT":  {"min":0,
+            "INT":  {"min":-1,
                      "max":100,
                      "default":1,
                      "step":1},
-            "NUMBER":{"min":0,
+            "NUMBER":{"min":-1,
                      "max":1,
                      "default":1,
                      "step":1},
@@ -159,6 +160,7 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
         op_code = class_code
         op_title = node_name
         content_label_objname = class_name.lower().replace(" ", "_")
+        print("Comfy content_label_objname", content_label_objname)
         category = f"{category_input}/{node_class.CATEGORY if hasattr(node_class, 'CATEGORY') else 'Diffusers'}"#"WAS NODES"
         NodeContent_class = Widget
         dim = (340, 180)
@@ -167,6 +169,8 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
 
         custom_input_socket_name = input_names
         custom_output_socket_name = output_names
+
+        mark_dirty = True
 
         def __init__(self, scene):
             super().__init__(scene, inputs=inputs, outputs=outputs)
@@ -201,6 +205,9 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
                 data = None
                 if input != "EXEC":
                     data = self.getInputData(x)
+
+                    print(data, input.lower())
+
                 if data is not None:
                     data_inputs[input.lower()] = data
                 x += 1
@@ -229,17 +236,23 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
                     if data != "":
                         data_inputs[ui_input[0].lower()] = data
 
-            # Create a unique key for the current set of inputs
-            cache_key = str(sorted(data_inputs.items()))
-
-            # Check if the result is already in the cache
-            if cache_key in self.cache:
-                result = self.cache[cache_key]
-            else:
-                # If not in cache, compute the result and store it in the cache
+            # # Create a unique key for the current set of inputs
+            # cache_key = str(sorted(data_inputs.items()))
+            #
+            # # Check if the result is already in the cache
+            # if cache_key in self.cache:
+            #     result = self.cache[cache_key]
+            # else:
+            #     # If not in cache, compute the result and store it in the cache
+            #     result = self.fn(self, **data_inputs)
+            #     self.cache[cache_key] = result
+            # del data_inputs
+            if "seed" in data_inputs:
+                if data_inputs.get("seed", 0) == 0:
+                    data_inputs["seed"] = secrets.randbelow(2147483647)
+            with torch.no_grad():
                 result = self.fn(self, **data_inputs)
-                self.cache[cache_key] = result
-            del data_inputs
+
             x = 0
 
             for i in list(self.adapted_outputs):
