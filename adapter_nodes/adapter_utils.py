@@ -170,7 +170,7 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
         custom_input_socket_name = input_names
         custom_output_socket_name = output_names
 
-        mark_dirty = True
+        make_dirty = True
 
         def __init__(self, scene):
             super().__init__(scene, inputs=inputs, outputs=outputs)
