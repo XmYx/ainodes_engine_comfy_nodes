@@ -231,6 +231,20 @@ def parse_comfynode(node_name, node_class, category):
 #     if mapping is not None:
 #         #print(mapping)
 # try:
+class Previewer:
+
+    def __init__(self):
+        self.callback = None
+
+    def set_callback(self, callback):
+        self.callback = callback
+
+    def prepare_callback(self, model, steps):
+        return self.callback
+
+latent_preview = Previewer()
+sys.modules['latent_preview'] = latent_preview
+
 import nodes
 
 for node_name, node_class in nodes.NODE_CLASS_MAPPINGS.items():
