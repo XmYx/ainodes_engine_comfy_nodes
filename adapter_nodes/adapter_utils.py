@@ -142,7 +142,8 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
                     setattr(self, combobox_name,
                             self.create_combo_box(combobox_items, combobox_name, accessible_name=combobox_name))
                 else:
-                    print("OTHER ITEM", type(tp), item)
+                    pass
+                    #print("OTHER ITEM", type(tp), item)
 
             self.create_main_layout(grid=1)
 
@@ -160,7 +161,7 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
         op_code = class_code
         op_title = node_name
         content_label_objname = class_name.lower().replace(" ", "_")
-        print("Comfy content_label_objname", content_label_objname)
+        # print("Comfy content_label_objname", content_label_objname)
         category = f"{category_input}/{node_class.CATEGORY if hasattr(node_class, 'CATEGORY') else 'Diffusers'}"#"WAS NODES"
         NodeContent_class = Widget
         dim = (340, 180)
@@ -206,7 +207,7 @@ def create_node(node_class, node_name, ui_inputs, inputs, input_names, outputs, 
                 if input != "EXEC":
                     data = self.getInputData(x)
 
-                    print(data, input.lower())
+                    # print(data, input.lower())
 
                 if data is not None:
                     data_inputs[input.lower()] = data
