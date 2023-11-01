@@ -7,6 +7,47 @@ import traceback
 from ai_nodes.ainodes_engine_comfy_nodes.adapter_nodes.adapter_utils import create_node
 
 
+
+def common_ksampler_with_custom_noise(model, seed, steps, cfg, sampler_name, scheduler, positive, negative, latent,
+                                      denoise=1.0, disable_noise=False, start_step=None, last_step=None,
+                                      force_full_denoise=False, noise=None):
+
+    print("USING AINODES SAMPLER")
+
+    latent_image = latent["samples"]
+    if noise is not None:
+        rng_noise = noise.next().detach().cpu()
+        noise = rng_noise.clone()
+    else:
+        if disable_noise:
+            noise = torch.zeros(latent_image.size(), dtype=latent_image.dtype, layout=latent_image.layout, device="cpu")
+        else:
+            batch_inds = latent["batch_index"] if "batch_index" in latent else None
+            from comfy.sample import prepare_noise
+            noise = prepare_noise(latent_image, seed, batch_inds)
+
+
+    noise_mask = None
+    if "noise_mask" in latent:
+        noise_mask = latent["noise_mask"]
+
+    callback = latent_preview.prepare_callback(model, steps)
+    disable_pbar = False
+
+    from comfy.sample import sample as sample_k
+
+    samples = sample_k(model, noise, steps, cfg, sampler_name, scheduler, positive, negative, latent_image,
+                                  denoise=denoise, disable_noise=disable_noise, start_step=start_step,
+                                  last_step=last_step,
+                                  force_full_denoise=force_full_denoise, noise_mask=noise_mask, callback=callback,
+                                  disable_pbar=disable_pbar, seed=seed)
+    out = latent.copy()
+    out["samples"] = samples
+
+    return (out,)
+
+
+
 # from ai_nodes.ainodes_engine_comfy_nodes.adapter_nodes.adapter_utils import parse_comfynode
 
 WAS = "GREAT"
@@ -245,7 +286,12 @@ class Previewer:
 latent_preview = Previewer()
 sys.modules['latent_preview'] = latent_preview
 
+
+
 import nodes
+nodes.common_ksampler = common_ksampler_with_custom_noise
+
+
 
 for node_name, node_class in nodes.NODE_CLASS_MAPPINGS.items():
     parse_comfynode(node_name, node_class, "ComfyUI Base")
